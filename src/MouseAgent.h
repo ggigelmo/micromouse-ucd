@@ -29,10 +29,17 @@ public:
 private:
     // Drives from the current cell to any cell in `targets`, sensing walls
     // and recomputing flood fill at every step. Used for all three phases;
-    // they differ only in which cells count as the destination.
+    // they differ only in which cells count as the destination. Checks for
+    // a simulator reset (see checkForReset()) before every step.
     void driveTo(const std::vector<std::pair<int, int>>& targets);
 
     static bool isAtAnyOf(int x, int y, const std::vector<std::pair<int, int>>& cells);
+
+    // If the mms Reset button was pressed (API::wasReset()), acknowledges it
+    // (which sends the mouse back to the start cell) and resyncs x_/y_/
+    // heading_ to match, without discarding anything already learned about
+    // the maze. Returns true if a reset was handled.
+    bool checkForReset();
 
     // Senses the walls around the current cell and records them into mazeMap_.
     void senseWalls();

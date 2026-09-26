@@ -74,17 +74,23 @@ cl /std:c++17 /EHsc /O2 /Fe:mouse.exe Main.cpp API.cpp src\MazeMap.cpp src\Flood
 
 The solver has been compiled with MSVC and smoke-tested end-to-end against a small
 stand-in for the mms protocol (not mms itself): all three phases complete and reach the
-goal without crashing on both `mazes/empty16.num` and `mazes/obstacle16.num`, and
+goal without crashing on both `mazes/empty16.num` and `mazes/obstacle16.num`, a simulated
+mid-run Reset button press (at each of the three phases, in separate runs) is correctly
+detected, acknowledged, and recovered from without losing any already-learned walls, and
 `FloodFill`'s BFS distances and wall-avoidance were checked against hand-built fixtures.
 
-It has also been run for real in mms against a real competition maze
-(`AAMC24Maze.txt`) with the single-phase (search-only) version and reached the goal:
-distance 92, 28 turns, score 132. Worth re-running now that the return/speed-run phases
-exist, to see the improved best-run stats — not yet done against real mms.
+It has also been run for real in mms against real competition mazes:
+`AAMC24Maze.txt` with the earlier single-phase (search-only) version (distance 92, 28
+turns, score 132), and `alljapan-015-1994-exp-fin.txt` with the three-phase version
+(best/current run: distance 144, 44 turns; total: distance 468, 154 turns; score 250.2 —
+confirming the speed-run phase does produce a distinct, faster best run). The Reset-button
+recovery has only been checked against the harness stand-in so far, not real mms.
 
 Deliberately not implemented (see `CLAUDE.md` for why): diagonal movement, a
 turn-weighted path cost, and extra exploration passes to map frontier cells before the
-speed run.
+speed run. Also out of scope: recovering from a genuine wall-collision "crash" response
+to `moveForward()` — see `CLAUDE.md`'s Architecture section for why that one isn't
+recoverable given the vendored `API.cpp`.
 
 ## Status / handoff
 
@@ -98,7 +104,9 @@ or IMU code exists here yet. The layering is deliberately built so a hardware po
   Porting to hardware means replacing those `API::wallFront/wallLeft/wallRight/
   moveForward/turnLeft/turnRight/setWall` calls with real sensor reads and motor/turn
   commands — the explore loop, wall bookkeeping, and flood-fill logic don't need to
-  change.
+  change. `API::wasReset`/`ackReset` (mms's Reset-button hook) are mms-specific and have
+  no direct hardware equivalent; the hardware team will need their own recovery
+  mechanism if they want the same "resume without losing known walls" behavior.
 - `Main.cpp` and `API.h`/`API.cpp` are mms-specific and would be dropped/replaced
   entirely for an Arduino build (no `Arduino.h`, `delay()`, or hardware headers are used
   anywhere in `src/`, so there's nothing hardware-specific to unwind first).

@@ -65,8 +65,21 @@ bool MouseAgent::isAtAnyOf(int x, int y, const std::vector<std::pair<int, int>>&
     return false;
 }
 
+bool MouseAgent::checkForReset() {
+    if (!API::wasReset()) return false;
+
+    log("reset detected: returning to start, keeping known walls");
+    API::ackReset();
+    x_ = 0;
+    y_ = 0;
+    heading_ = Direction::NORTH;
+    return true;
+}
+
 void MouseAgent::driveTo(const std::vector<std::pair<int, int>>& targets) {
     while (!isAtAnyOf(x_, y_, targets)) {
+        if (checkForReset()) continue;
+
         senseWalls();
         floodFill_.recompute(mazeMap_, targets);
 
