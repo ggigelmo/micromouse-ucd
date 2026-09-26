@@ -1,21 +1,39 @@
 #pragma once
 
+#include <utility>
+#include <vector>
+
 #include "Direction.h"
 #include "FloodFill.h"
 #include "MazeMap.h"
 
-// Ties MazeMap + FloodFill together into an explore-to-goal run, talking to
-// the mms simulator directly through API:: (see API.h). Software-only: no
-// hardware of any kind is involved.
+// Ties MazeMap + FloodFill together into the classic three-phase micromouse
+// run, talking to the mms simulator directly through API:: (see API.h).
+// Software-only: no hardware of any kind is involved.
+//
+// Diagonal movement, turn-weighted path costs, and extra exploration passes
+// to map frontier cells before the speed run are deliberately not
+// implemented yet - those only pay off once there's a real, calibrated
+// motion profile from hardware to weigh them against.
 class MouseAgent {
 public:
     MouseAgent();
 
-    // Explores the maze cell by cell, using flood fill to always advance
-    // toward the goal, until a center cell is reached.
-    void exploreToGoal();
+    // Runs all three phases in sequence: search (start -> goal, discovering
+    // walls), return (goal -> start, using what's now known), and a speed
+    // run (start -> goal again). The speed run is what mms scores as the
+    // new best/current run, since it no longer needs to feel out any walls
+    // that were already discovered on the way there and back.
+    void run();
 
 private:
+    // Drives from the current cell to any cell in `targets`, sensing walls
+    // and recomputing flood fill at every step. Used for all three phases;
+    // they differ only in which cells count as the destination.
+    void driveTo(const std::vector<std::pair<int, int>>& targets);
+
+    static bool isAtAnyOf(int x, int y, const std::vector<std::pair<int, int>>& cells);
+
     // Senses the walls around the current cell and records them into mazeMap_.
     void senseWalls();
 
