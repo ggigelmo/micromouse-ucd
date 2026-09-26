@@ -16,6 +16,10 @@ software-only step, no hardware involved.
 - `mazes/empty16.num` — boundary-only maze, for sanity-checking movement/turning.
 - `mazes/obstacle16.num` — a few interior walls near the start and the goal entrance, for
   sanity-checking that the solver actually routes around obstacles.
+- `build.bat` — Windows wrapper that loads the MSVC environment (`vcvars64.bat`) and runs
+  `cl`, for use as mms's Build Command (see below): mms launches Build/Run commands
+  directly rather than through a shell, so a bare `cl ...` command won't have the compiler
+  on its PATH unless something first runs `vcvars64.bat` in the same process.
 
 ## Build
 
@@ -46,8 +50,13 @@ cl /std:c++17 /EHsc /O2 /Fe:mouse.exe Main.cpp API.cpp src\MazeMap.cpp src\Flood
 3. Fill in:
    - **Name:** `flood-fill` (anything)
    - **Directory:** this repo's folder
-   - **Build Command:** one of the two build commands above
-   - **Run Command:** `mouse.exe`
+   - **Build Command:** `cmd /c "<path to this repo>\build.bat"` (mms runs the Build/Run
+     commands directly, not through a shell, so use this wrapper rather than a bare `cl`
+     or `g++` command — see `build.bat`)
+   - **Run Command:** the **absolute path** to `micromouse.exe`, e.g.
+     `C:\path\to\micromouse-ucd\micromouse.exe` (mms's Run step doesn't use the same
+     working directory as Build, so a bare `micromouse.exe` fails with "process failed to
+     start")
 4. Load a maze: File → Import Maze → pick `mazes/empty16.num` first, then
    `mazes/obstacle16.num`, then a real competition maze (e.g. from
    [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles)).
@@ -59,5 +68,28 @@ cl /std:c++17 /EHsc /O2 /Fe:mouse.exe Main.cpp API.cpp src\MazeMap.cpp src\Flood
 The solver has been compiled with MSVC and smoke-tested end-to-end against a small
 stand-in for the mms protocol (not mms itself): it reaches a goal cell without crashing
 on both `mazes/empty16.num` and `mazes/obstacle16.num`, and `FloodFill`'s BFS distances
-and wall-avoidance were checked against hand-built fixtures. Still worth running for
-real in mms to see it visually and try a real competition maze.
+and wall-avoidance were checked against hand-built fixtures.
+
+It has also been run for real in mms against a real competition maze
+(`AAMC24Maze.txt`) and reached the goal: distance 92, 28 turns, score 132. That single
+run is the whole story so far — the solver stops as soon as it reaches the center; it
+doesn't yet return to the start and do a faster confirmed run, which is why
+current/best/total stats are all identical. That return-to-start + speed-run pass is the
+next piece of work.
+
+## Status / handoff
+
+This repo currently targets the mms simulator only, on purpose — no ESP32, motor, ToF,
+or IMU code exists here yet. The layering is deliberately built so a hardware port later
+(e.g. onto Arduino/ESP32-C6) only touches one file:
+
+- `src/MazeMap` and `src/FloodFill` are pure logic with no I/O — nothing to change to run
+  on real hardware.
+- `src/MouseAgent` is the only file that calls `API::` (the mms stdin/stdout protocol).
+  Porting to hardware means replacing those `API::wallFront/wallLeft/wallRight/
+  moveForward/turnLeft/turnRight/setWall` calls with real sensor reads and motor/turn
+  commands — the explore loop, wall bookkeeping, and flood-fill logic don't need to
+  change.
+- `Main.cpp` and `API.h`/`API.cpp` are mms-specific and would be dropped/replaced
+  entirely for an Arduino build (no `Arduino.h`, `delay()`, or hardware headers are used
+  anywhere in `src/`, so there's nothing hardware-specific to unwind first).
