@@ -1,10 +1,9 @@
 #include <iostream>
-
 #include "src/MouseAgent.h"
-
+#include "SimulatorPlatform.h"
 int main() {
     std::cerr << "Running flood-fill solver..." << std::endl;
-    MouseAgent mouseAgent;
-    mouseAgent.run();
-    return 0;
+    SimulatorPlatform platform;
+    MouseAgent mouseAgent(platform);
+    return mouseAgent.run() == MotionResult::Ok ? 0 : 1;
 }

@@ -7,3 +7,5 @@
 
 # Local tooling state
 .claude/
+build/
+__pycache__/

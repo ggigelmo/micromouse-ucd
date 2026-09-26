@@ -1,29 +1,28 @@
-# micromouse-ucd — flood-fill solver (algorithm only)
+# micromouse-ucd — simulator and ESP32-C6 robot
 
-This is the flood-fill maze-solving algorithm for the UCD Hack Club 16x16 Micromouse
-competition, tested against [mackorone/mms](https://github.com/mackorone/mms) — a
-software-only step, no hardware involved.
+A shared 16×16 flood-fill solver with two platforms: the mms desktop simulator and
+an ESP32-C6 robot using encoders, an MPU gyro and three VL53L0X distance sensors.
+The robot uses 180 mm squares and drives all three phases slowly: centre → start → centre.
+
+**Robot setup, calibration, wiring and test sequence:** [firmware/README.md](firmware/README.md).
+Upload boots idle. Physical movement remains gated until measured calibration is saved.
+
+```sh
+python3 scripts/test.py
+python3 scripts/firmware.py --upload /dev/cu.usbmodem1101
+```
 
 ## Layout
 
-- `Main.cpp` — entry point, wires `MouseAgent` up and runs it.
-- `API.h` / `API.cpp` — official `mackorone/mms-cpp` stdin/stdout adapter for talking to
-  the mms simulator process. Unmodified.
-- `src/Direction.h` — compass heading + turn helpers.
-- `src/MazeMap.{h,cpp}` — 16x16 wall storage (known vs. sensed) and goal-cell logic.
-- `src/FloodFill.{h,cpp}` — BFS distance-to-goal computation and next-move selection.
-- `src/MouseAgent.{h,cpp}` — the three-phase run (search → return → speed run), calls
-  `API::` directly.
-- `mazes/empty16.num` — boundary-only maze, for sanity-checking movement/turning.
-- `mazes/obstacle16.num` — a few interior walls near the start and the goal entrance, for
-  sanity-checking that the solver actually routes around obstacles.
-- `mazes/c00d3p.txt`, `mazes/alljapan-015-1994-exp-fin.txt`, `mazes/apec2019.txt` — real
-  competition mazes (map format, from [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles))
-  for testing against actual known-solvable layouts.
-- `build.bat` — Windows wrapper that loads the MSVC environment (`vcvars64.bat`) and runs
-  `cl`, for use as mms's Build Command (see below): mms launches Build/Run commands
-  directly rather than through a shell, so a bare `cl ...` command won't have the compiler
-  on its PATH unless something first runs `vcvars64.bat` in the same process.
+- `src/MazeMap`, `src/FloodFill`: unchanged shared wall storage and BFS logic.
+- `src/MouseAgent`: shared three-phase solver, commits pose only after completed motion.
+- `src/RobotPlatform.h`: wall, movement, stop and logging contract with explicit faults.
+- `SimulatorPlatform.h`, `Main.cpp`: mms adapter; `API.h` and `API.cpp` remain unchanged.
+- `firmware/`: ESP32 driver, control/calibration math and USB/BOOT interface.
+- `scripts/firmware.py`: assemble shared sources and compile/upload the Arduino sketch.
+- `scripts/test.py`, `tests/`: solver failure tests and five-maze mms protocol regression.
+- `mazes/`: two simple fixtures and three competition layouts.
+- `build.bat`: original Windows MSVC simulator build wrapper.
 
 ## Build
 
@@ -65,48 +64,28 @@ cl /std:c++17 /EHsc /O2 /Fe:mouse.exe Main.cpp API.cpp src\MazeMap.cpp src\Flood
    `mazes/obstacle16.num`, then a real competition maze (e.g. from
    [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles)).
 5. Click "Run". It runs three phases in sequence — search (start → goal, discovering
-   walls), return (goal → start), and a speed run (start → goal again, using the now-known
+   walls), return (goal → start), and a final run (start → goal again, using the now-known
    map) — then stops. Debug logs for each phase are printed to stderr, visible in mms's
-   console/log panel; the Stats tab's best/current run should reflect the speed run, not
+   console/log panel; the Stats tab's best/current run should reflect the final run, not
    the initial search.
 
-## Local verification (already done for you)
+## Verification and limits
 
-The solver has been compiled with MSVC and smoke-tested end-to-end against a small
-stand-in for the mms protocol (not mms itself): all three phases complete and reach the
-goal without crashing on both `mazes/empty16.num` and `mazes/obstacle16.num`, a simulated
-mid-run Reset button press (at each of the three phases, in separate runs) is correctly
-detected, acknowledged, and recovered from without losing any already-learned walls, and
-`FloodFill`'s BFS distances and wall-avoidance were checked against hand-built fixtures.
+`python3 scripts/test.py` compiles with C++17 and checks all three phases through the
+unchanged mms text protocol on all five bundled mazes. It also checks resets in every
+phase, invalid sensing, unreachable goals, motion faults in every phase, and partial
+U-turn failure. Motion failure must not advance the logical square; only completed
+quarter-turns change heading. Calibration validity, chassis clearance, range validity,
+ramps and PWM saturation have portable tests. `SANITIZE=1` adds address/undefined
+behaviour sanitizers. CMake/CTest is available as an alternative for the C++ tests.
 
-It has also been run for real in mms against real competition mazes:
-`AAMC24Maze.txt` with the earlier single-phase (search-only) version (distance 92, 28
-turns, score 132), and `alljapan-015-1994-exp-fin.txt` with the three-phase version
-(best/current run: distance 144, 44 turns; total: distance 468, 154 turns; score 250.2 —
-confirming the speed-run phase does produce a distinct, faster best run). The Reset-button
-recovery has only been checked against the harness stand-in so far, not real mms.
+The upstream repository recorded previous GUI mms runs. The new automated regression
+uses a protocol harness, not the GUI. Arduino compilation and desktop success do not
+validate motor polarity, encoder scaling, sensor alignment, stopping distance, floor
+accuracy, battery resets or actual maze performance. Follow the staged physical tests
+in the firmware guide before running autonomously.
 
-Deliberately not implemented (see `CLAUDE.md` for why): diagonal movement, a
-turn-weighted path cost, and extra exploration passes to map frontier cells before the
-speed run. Also out of scope: recovering from a genuine wall-collision "crash" response
-to `moveForward()` — see `CLAUDE.md`'s Architecture section for why that one isn't
-recoverable given the vendored `API.cpp`.
-
-## Status / handoff
-
-This repo currently targets the mms simulator only, on purpose — no ESP32, motor, ToF,
-or IMU code exists here yet. The layering is deliberately built so a hardware port later
-(e.g. onto Arduino/ESP32-C6) only touches one file:
-
-- `src/MazeMap` and `src/FloodFill` are pure logic with no I/O — nothing to change to run
-  on real hardware.
-- `src/MouseAgent` is the only file that calls `API::` (the mms stdin/stdout protocol).
-  Porting to hardware means replacing those `API::wallFront/wallLeft/wallRight/
-  moveForward/turnLeft/turnRight/setWall` calls with real sensor reads and motor/turn
-  commands — the explore loop, wall bookkeeping, and flood-fill logic don't need to
-  change. `API::wasReset`/`ackReset` (mms's Reset-button hook) are mms-specific and have
-  no direct hardware equivalent; the hardware team will need their own recovery
-  mechanism if they want the same "resume without losing known walls" behavior.
-- `Main.cpp` and `API.h`/`API.cpp` are mms-specific and would be dropped/replaced
-  entirely for an Arduino build (no `Arduino.h`, `delay()`, or hardware headers are used
-  anywhere in `src/`, so there's nothing hardware-specific to unwind first).
+The mms API still terminates on a simulator collision response; it is intentionally
+unchanged. Hardware reports faults through `MotionResult`, stops and requires manual
+repositioning. No diagonal navigation, extra exploration passes or turn-weighted route
+costs are introduced.

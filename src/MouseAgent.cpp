@@ -1,103 +1,67 @@
 #include "MouseAgent.h"
+#include <algorithm>
 
-#include <iostream>
-#include <vector>
-
-#include "../API.h"
-
-namespace {
-const std::vector<std::pair<int, int>> kGoalCells = {{7, 7}, {7, 8}, {8, 7}, {8, 8}};
-const std::vector<std::pair<int, int>> kStartCell = {{0, 0}};
-
-void log(const std::string& text) {
-    std::cerr << text << std::endl;
+MotionResult MouseAgent::senseWalls() {
+    WallReadings w;
+    const auto result = platform_.readWalls(w);
+    if (result != MotionResult::Ok) return result;
+    const Direction directions[] = {heading_, turnLeftFrom(heading_), turnRightFrom(heading_)};
+    const bool walls[] = {w.front, w.left, w.right};
+    for (int i = 0; i < 3; ++i) {
+        if (walls[i]) mazeMap_.setWall(x_, y_, directions[i]);
+        else mazeMap_.setNoWall(x_, y_, directions[i]);
+    }
+    return MotionResult::Ok;
 }
-}  // namespace
-
-MouseAgent::MouseAgent() : x_(0), y_(0), heading_(Direction::NORTH) {}
-
-void MouseAgent::senseWalls() {
-    Direction frontDir = heading_;
-    Direction leftDir = turnLeftFrom(heading_);
-    Direction rightDir = turnRightFrom(heading_);
-
-    if (API::wallFront()) {
-        mazeMap_.setWall(x_, y_, frontDir);
-    } else {
-        mazeMap_.setNoWall(x_, y_, frontDir);
+MotionResult MouseAgent::turnToFaceAndAdvance(Direction target) {
+    while (heading_ != target) {
+        const bool right = target != turnLeftFrom(heading_);
+        const auto result = platform_.turnQuarter(right);
+        if (result != MotionResult::Ok) return result;
+        // Commit each completed quarter turn, even halfway through a U-turn.
+        heading_ = right ? turnRightFrom(heading_) : turnLeftFrom(heading_);
     }
-    if (API::wallLeft()) {
-        mazeMap_.setWall(x_, y_, leftDir);
-    } else {
-        mazeMap_.setNoWall(x_, y_, leftDir);
-    }
-    if (API::wallRight()) {
-        mazeMap_.setWall(x_, y_, rightDir);
-    } else {
-        mazeMap_.setNoWall(x_, y_, rightDir);
-    }
-}
-
-void MouseAgent::turnToFaceAndAdvance(Direction target) {
-    if (target == turnRightFrom(heading_)) {
-        API::turnRight();
-    } else if (target == turnLeftFrom(heading_)) {
-        API::turnLeft();
-    } else if (target == behind(heading_)) {
-        API::turnRight();
-        API::turnRight();
-    }
-    // else target == heading_: no turn needed.
-
-    heading_ = target;
-    API::moveForward();
-
+    const auto result = platform_.moveOneCell();
+    if (result != MotionResult::Ok) return result;
     int nx, ny;
     MazeMap::neighbor(x_, y_, heading_, nx, ny);
-    x_ = nx;
-    y_ = ny;
+    x_ = nx; y_ = ny;
+    return MotionResult::Ok;
 }
-
-bool MouseAgent::isAtAnyOf(int x, int y, const std::vector<std::pair<int, int>>& cells) {
-    for (const auto& cell : cells) {
-        if (cell.first == x && cell.second == y) return true;
-    }
-    return false;
-}
-
-bool MouseAgent::checkForReset() {
-    if (!API::wasReset()) return false;
-
-    log("reset detected: returning to start, keeping known walls");
-    API::ackReset();
-    x_ = 0;
-    y_ = 0;
-    heading_ = Direction::NORTH;
-    return true;
-}
-
-void MouseAgent::driveTo(const std::vector<std::pair<int, int>>& targets) {
-    while (!isAtAnyOf(x_, y_, targets)) {
-        if (checkForReset()) continue;
-
-        senseWalls();
+MotionResult MouseAgent::driveTo(const std::vector<std::pair<int, int>>& targets) {
+    while (std::find(targets.begin(), targets.end(), std::make_pair(x_, y_)) == targets.end()) {
+        if (platform_.consumeSimulatorReset()) {
+            x_ = y_ = 0; heading_ = Direction::NORTH;
+            platform_.log("reset: start pose restored; map retained");
+            continue;
+        }
+        auto result = senseWalls();
+        if (result != MotionResult::Ok) return result;
         floodFill_.recompute(mazeMap_, targets);
-
-        Direction next = floodFill_.bestDirection(mazeMap_, x_, y_, heading_);
-        turnToFaceAndAdvance(next);
+        if (floodFill_.distanceAt(x_, y_) == FloodFill::UNREACHABLE)
+            return MotionResult::Unreachable;
+        const auto next = floodFill_.bestDirection(mazeMap_, x_, y_, heading_);
+        int nx, ny;
+        MazeMap::neighbor(x_, y_, next, nx, ny);
+        if (mazeMap_.hasWall(x_, y_, next) || !MazeMap::inBounds(nx, ny))
+            return MotionResult::Unreachable;
+        result = turnToFaceAndAdvance(next);
+        if (result != MotionResult::Ok) return result;
     }
+    return MotionResult::Ok;
 }
-
-void MouseAgent::run() {
-    log("search phase: starting");
-    driveTo(kGoalCells);
-    log("search phase: reached goal cell");
-
-    log("return phase: starting");
-    driveTo(kStartCell);
-    log("return phase: back at start");
-
-    log("speed run: starting");
-    driveTo(kGoalCells);
-    log("speed run: reached goal cell");
+MotionResult MouseAgent::run() {
+    const std::vector<std::pair<int, int>> goals = {{7,7}, {7,8}, {8,7}, {8,8}};
+    const std::vector<std::pair<int, int>> start = {{0,0}};
+    const char* phases[] = {"search phase", "return phase", "final run phase"};
+    for (int phase = 0; phase < 3; ++phase) {
+        platform_.log(phases[phase]);
+        const auto result = driveTo(phase == 1 ? start : goals);
+        platform_.stop();
+        if (result != MotionResult::Ok) {
+            platform_.log(resultName(result)); return result;
+        }
+        platform_.log("phase complete");
+    }
+    return MotionResult::Ok;
 }
