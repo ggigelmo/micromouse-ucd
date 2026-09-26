@@ -7,6 +7,7 @@
 
 namespace {
 const std::vector<std::pair<int, int>> kGoalCells = {{7, 7}, {7, 8}, {8, 7}, {8, 8}};
+const std::vector<std::pair<int, int>> kStartCell = {{0, 0}};
 
 void log(const std::string& text) {
     std::cerr << text << std::endl;
@@ -57,16 +58,33 @@ void MouseAgent::turnToFaceAndAdvance(Direction target) {
     y_ = ny;
 }
 
-void MouseAgent::exploreToGoal() {
-    log("exploreToGoal: starting");
+bool MouseAgent::isAtAnyOf(int x, int y, const std::vector<std::pair<int, int>>& cells) {
+    for (const auto& cell : cells) {
+        if (cell.first == x && cell.second == y) return true;
+    }
+    return false;
+}
 
-    while (!MazeMap::isGoal(x_, y_)) {
+void MouseAgent::driveTo(const std::vector<std::pair<int, int>>& targets) {
+    while (!isAtAnyOf(x_, y_, targets)) {
         senseWalls();
-        floodFill_.recompute(mazeMap_, kGoalCells);
+        floodFill_.recompute(mazeMap_, targets);
 
         Direction next = floodFill_.bestDirection(mazeMap_, x_, y_, heading_);
         turnToFaceAndAdvance(next);
     }
+}
 
-    log("exploreToGoal: reached goal cell");
+void MouseAgent::run() {
+    log("search phase: starting");
+    driveTo(kGoalCells);
+    log("search phase: reached goal cell");
+
+    log("return phase: starting");
+    driveTo(kStartCell);
+    log("return phase: back at start");
+
+    log("speed run: starting");
+    driveTo(kGoalCells);
+    log("speed run: reached goal cell");
 }

@@ -12,9 +12,12 @@ team is building the physical robot and will port this onto Arduino/ESP32-C6; do
 abstractions here in anticipation of that port (see "Hardware handoff" below for why the
 current layering already makes it low-effort when it happens).
 
-Current status: validated against a real competition maze in mms (reaches the goal). It
-only does a single explore-to-goal run and stops — no return-to-start or speed-run pass
-yet. That's the next piece of work.
+Current status: validated against a real competition maze in mms (reaches the goal) and
+now runs the classic three-phase sequence (search → return → speed run, see Architecture
+below). Deliberately not implemented yet, and not worth doing until there's real hardware
+timing to weigh them against: diagonal movement, a turn-weighted path cost (vs. the
+current plain cell-count BFS + straight-preferring tie-break), and extra exploration
+passes to map frontier cells before committing to the speed run.
 
 ## Build
 
@@ -70,14 +73,20 @@ Three layers, in dependency order:
 3. **`src/MouseAgent`** — the only layer that talks to the outside world, and it does so
    by calling `API::` (from `API.h`/`API.cpp`, the official unmodified
    `mackorone/mms-cpp` adapter) directly — there is intentionally no abstraction
-   interface between the algorithm and `API::`. `exploreToGoal()` repeats: sense the 3
-   walls around the current cell (front/left/right, translated from robot-relative to
-   absolute `Direction` using the current heading) → record into `MazeMap` → recompute
-   `FloodFill` → turn/advance toward the best neighbor → repeat until `isGoal()`.
+   interface between the algorithm and `API::`. `driveTo(targets)` is the shared drive
+   loop: sense the 3 walls around the current cell (front/left/right, translated from
+   robot-relative to absolute `Direction` using the current heading) → record into
+   `MazeMap` → recompute `FloodFill` toward `targets` → turn/advance toward the best
+   neighbor → repeat until the current cell is one of `targets`. `run()` calls it three
+   times in sequence — search (`driveTo(goal cells)`, discovering walls), return
+   (`driveTo(start cell)`), speed run (`driveTo(goal cells)` again, now using what's
+   fully known). Only the search phase's result is a "cold" run; by the time the speed
+   run happens the relevant walls are already known, so mms records it as a new,
+   typically faster, best run.
 
-`Main.cpp` at the repo root just wires `MouseAgent` up and calls `exploreToGoal()`. All
-logging goes to stderr (`std::cerr`) — stdout is the mms protocol channel and must never
-carry anything but protocol commands.
+`Main.cpp` at the repo root just wires `MouseAgent` up and calls `run()`. All logging goes
+to stderr (`std::cerr`) — stdout is the mms protocol channel and must never carry anything
+but protocol commands.
 
 `API.h`/`API.cpp` are copied verbatim from `mackorone/mms-cpp`; don't hand-modify them —
 re-fetch from upstream if the protocol ever needs more commands (e.g. `wallBack`,

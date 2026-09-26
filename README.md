@@ -12,10 +12,14 @@ software-only step, no hardware involved.
 - `src/Direction.h` — compass heading + turn helpers.
 - `src/MazeMap.{h,cpp}` — 16x16 wall storage (known vs. sensed) and goal-cell logic.
 - `src/FloodFill.{h,cpp}` — BFS distance-to-goal computation and next-move selection.
-- `src/MouseAgent.{h,cpp}` — explore-to-goal loop, calls `API::` directly.
+- `src/MouseAgent.{h,cpp}` — the three-phase run (search → return → speed run), calls
+  `API::` directly.
 - `mazes/empty16.num` — boundary-only maze, for sanity-checking movement/turning.
 - `mazes/obstacle16.num` — a few interior walls near the start and the goal entrance, for
   sanity-checking that the solver actually routes around obstacles.
+- `mazes/c00d3p.txt`, `mazes/alljapan-015-1994-exp-fin.txt`, `mazes/apec2019.txt` — real
+  competition mazes (map format, from [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles))
+  for testing against actual known-solvable layouts.
 - `build.bat` — Windows wrapper that loads the MSVC environment (`vcvars64.bat`) and runs
   `cl`, for use as mms's Build Command (see below): mms launches Build/Run commands
   directly rather than through a shell, so a bare `cl ...` command won't have the compiler
@@ -60,22 +64,27 @@ cl /std:c++17 /EHsc /O2 /Fe:mouse.exe Main.cpp API.cpp src\MazeMap.cpp src\Flood
 4. Load a maze: File → Import Maze → pick `mazes/empty16.num` first, then
    `mazes/obstacle16.num`, then a real competition maze (e.g. from
    [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles)).
-5. Click "Run". The mouse should navigate to one of the four center cells without
-   crashing. Debug logs are printed to stderr, visible in mms's console/log panel.
+5. Click "Run". It runs three phases in sequence — search (start → goal, discovering
+   walls), return (goal → start), and a speed run (start → goal again, using the now-known
+   map) — then stops. Debug logs for each phase are printed to stderr, visible in mms's
+   console/log panel; the Stats tab's best/current run should reflect the speed run, not
+   the initial search.
 
 ## Local verification (already done for you)
 
 The solver has been compiled with MSVC and smoke-tested end-to-end against a small
-stand-in for the mms protocol (not mms itself): it reaches a goal cell without crashing
-on both `mazes/empty16.num` and `mazes/obstacle16.num`, and `FloodFill`'s BFS distances
-and wall-avoidance were checked against hand-built fixtures.
+stand-in for the mms protocol (not mms itself): all three phases complete and reach the
+goal without crashing on both `mazes/empty16.num` and `mazes/obstacle16.num`, and
+`FloodFill`'s BFS distances and wall-avoidance were checked against hand-built fixtures.
 
 It has also been run for real in mms against a real competition maze
-(`AAMC24Maze.txt`) and reached the goal: distance 92, 28 turns, score 132. That single
-run is the whole story so far — the solver stops as soon as it reaches the center; it
-doesn't yet return to the start and do a faster confirmed run, which is why
-current/best/total stats are all identical. That return-to-start + speed-run pass is the
-next piece of work.
+(`AAMC24Maze.txt`) with the single-phase (search-only) version and reached the goal:
+distance 92, 28 turns, score 132. Worth re-running now that the return/speed-run phases
+exist, to see the improved best-run stats — not yet done against real mms.
+
+Deliberately not implemented (see `CLAUDE.md` for why): diagonal movement, a
+turn-weighted path cost, and extra exploration passes to map frontier cells before the
+speed run.
 
 ## Status / handoff
 

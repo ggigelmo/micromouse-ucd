@@ -5,6 +5,6 @@
 int main() {
     std::cerr << "Running flood-fill solver..." << std::endl;
     MouseAgent mouseAgent;
-    mouseAgent.exploreToGoal();
+    mouseAgent.run();
     return 0;
 }
