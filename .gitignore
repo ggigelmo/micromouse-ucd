@@ -1,0 +1,9 @@
+# Build artifacts
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+
+# Local tooling state
+.claude/
