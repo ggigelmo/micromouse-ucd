@@ -16,6 +16,9 @@ software-only step, no hardware involved.
 - `mazes/empty16.num` — boundary-only maze, for sanity-checking movement/turning.
 - `mazes/obstacle16.num` — a few interior walls near the start and the goal entrance, for
   sanity-checking that the solver actually routes around obstacles.
+- `mazes/c00d3p.txt`, `mazes/alljapan-015-1994-exp-fin.txt`, `mazes/apec2019.txt` — real
+  competition mazes (map format, from [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles))
+  for testing against actual known-solvable layouts.
 - `build.bat` — Windows wrapper that loads the MSVC environment (`vcvars64.bat`) and runs
   `cl`, for use as mms's Build Command (see below): mms launches Build/Run commands
   directly rather than through a shell, so a bare `cl ...` command won't have the compiler
