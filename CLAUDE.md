@@ -36,10 +36,15 @@ There is no test suite or linter configured; validation is done by running insid
 ## Run in mms
 
 Configure this directory as a custom algorithm in the mms GUI (`+` button): Directory =
-this repo root, Build Command = the `g++`/`cl` command above producing `mouse.exe`, Run
-Command = `mouse.exe`. Load `mazes/empty16.num` (boundary-only) first to sanity-check
-movement, then `mazes/obstacle16.num` (a few hand-placed interior walls), then a real
-maze file from [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles).
+this repo root, Run Command = `micromouse.exe`. For Build Command, mms launches the
+Build/Run commands directly rather than through a shell, so `cl` won't have its
+environment set up (no `vcvars64.bat` has run) and a bare `g++`/`cl` command will fail
+with a generic "process failed to start"/"file not found" error even if the compiler
+works fine from a terminal. Use `build.bat` (loads MSVC's env then runs `cl`) via:
+`cmd /c "<repo path>\build.bat"`. Load `mazes/empty16.num` (boundary-only) first to
+sanity-check movement, then `mazes/obstacle16.num` (a few hand-placed interior walls),
+then a real maze file from
+[micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles).
 
 ## Architecture
 

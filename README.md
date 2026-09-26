@@ -16,6 +16,10 @@ software-only step, no hardware involved.
 - `mazes/empty16.num` — boundary-only maze, for sanity-checking movement/turning.
 - `mazes/obstacle16.num` — a few interior walls near the start and the goal entrance, for
   sanity-checking that the solver actually routes around obstacles.
+- `build.bat` — Windows wrapper that loads the MSVC environment (`vcvars64.bat`) and runs
+  `cl`, for use as mms's Build Command (see below): mms launches Build/Run commands
+  directly rather than through a shell, so a bare `cl ...` command won't have the compiler
+  on its PATH unless something first runs `vcvars64.bat` in the same process.
 
 ## Build
 
@@ -46,8 +50,10 @@ cl /std:c++17 /EHsc /O2 /Fe:mouse.exe Main.cpp API.cpp src\MazeMap.cpp src\Flood
 3. Fill in:
    - **Name:** `flood-fill` (anything)
    - **Directory:** this repo's folder
-   - **Build Command:** one of the two build commands above
-   - **Run Command:** `mouse.exe`
+   - **Build Command:** `cmd /c "<path to this repo>\build.bat"` (mms runs the Build/Run
+     commands directly, not through a shell, so use this wrapper rather than a bare `cl`
+     or `g++` command — see `build.bat`)
+   - **Run Command:** `micromouse.exe`
 4. Load a maze: File → Import Maze → pick `mazes/empty16.num` first, then
    `mazes/obstacle16.num`, then a real competition maze (e.g. from
    [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles)).
